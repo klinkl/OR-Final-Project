@@ -68,7 +68,7 @@ def neighbour_adj_matrix(rows: int, columns: int):
         for neighbor in neighbors:
             adjacency_matrix[index][neighbor] = 1
             adjacency_matrix[neighbor][index] = 1  # Because the matrix is symmetric
-    print(adjacency_matrix)
+    #print(adjacency_matrix)
     return adjacency_matrix
     adj = [[0 for j in range(columns)] for i in range(rows)]
     for i in range(rows):
@@ -87,8 +87,9 @@ def main():
     # data cleaning
     filtered_df = df[df['State'] == 'WA']
     filtered_df = filtered_df[filtered_df['Vehicle Location'].notna()]
-
-    neighbour_adj_matrix(y, x)
+    read_data_EV()
+    #print(read_data())
+    #neighbour_adj_matrix(y, x)
 
 def read_data():
     # Example usage:
@@ -123,7 +124,8 @@ def read_data():
 
     #for i, data in enumerate(districts):
     #    print(i, data)
-
+    
+    return cars
     """ for i in np.arange(y - 1, -1, -1):
         for j in range(x):
             print(f"Block ({i},{j}): {cars[(i, j)]}")
@@ -143,7 +145,45 @@ def read_data():
     plt.yticks(np.arange(y - 1, -1, -1))
     plt.grid(False)
     plt.show() """
+def read_data_EV():
+        # Example usage:
+    most_eastern_north_point = (-116.9164, 49.0025) # is (15, 23)
+    most_western_south_point = (-124.7333, 45.5434) # is (0,0)
+    coordinate = (-116.9165, 49.0024) #(-124.7333, 45.5434) #(-122.30839, 47.610365)
+    grid_size = (64, 96)
+    y, x = grid_size
 
+    df = pd.read_csv("Data/alt_fuel_stations.csv")
+
+    L2 = {}
+    DC = {}
+    for i in range(y):
+        for j in range(x):
+            L2[(i, j)] = 0
+            DC[(i, j)] = 0
+
+    for index, row in df.iterrows():
+        latitude = row['Latitude']
+        longitude = row['Longitude']
+        ev_level2_count = row['EV Level2 EVSE Num']
+        ev_dc_fast_count = row['EV DC Fast Count']
+        if pd.isna(ev_level2_count):
+            ev_level2_count = 0
+        if pd.isna(ev_dc_fast_count):
+            ev_dc_fast_count = 0
+        block = find_block((longitude, latitude), most_eastern_north_point, most_western_south_point, grid_size)
+        L2[block] += ev_level2_count
+        DC[block] += ev_dc_fast_count
+
+    #districts = [L2[(i, j)] for j in range(x) for i in range(y)]
+
+    #print("L2 counts by block:", L2)
+    #print("DC counts by block:", DC)
+
+    #for i, data in enumerate(districts):
+    #    print(i, data)
+    
+    return L2,DC   
 
 
 
