@@ -3,7 +3,8 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import math
-from enum import Enum
+import matplotlib.pyplot as plt
+import numpy as np
 def get_neighbors(i, j,m,n):
     """Get the list of neighbors for a given (i, j) index in an m x n grid."""
     neighbors = []
@@ -22,8 +23,7 @@ def get_neighbors(i, j,m,n):
         neighbors.append((i, j + 1))
 
     return neighbors
-
-def main():
+def heuristic_algorithm():
     grid_size = (64, 96)
     y, x = grid_size
     adj = neighbour_adj_matrix(y,x)
@@ -32,7 +32,7 @@ def main():
     L2_cap = 3
     DC_cap = 12
     L2_cost = 2000
-    DC_cost = 7500
+    DC_cost = 10000
     budget = 9164000
     unserved_cars = {}
     L2_built = {}
@@ -42,7 +42,13 @@ def main():
         for j in range(x):
             L2_built[(i, j)] = 0
             DC_built[(i, j)]=0
-            unserved_cars[(i,j)] = cars[(i,j)]-L2[(i,j)]*L2_cap
+            unserved_cars[(i,j)] = cars[(i,j)]
+    unprocessed_unserved_cars = unserved_cars
+    for i in range(y):
+        for j in range(x):
+            L2_built[(i, j)] = 0
+            DC_built[(i, j)]=0
+            unserved_cars[(i,j)] = unserved_cars[(i,j)]-L2[(i,j)]*L2_cap
     #Then process preexisting DC chargers depending on which neighboring block/own block has the most unserved cars
     #-DC[(i,j)]*DC_cap
     for i in range(y):
@@ -101,22 +107,22 @@ def main():
     DC_ratio = DC_cost/DC_cap
     cost = 0
     cap = 0
-    bool = False
+    DC_better_ratio = False
     if DC_ratio <= L2_ratio:
         cost = DC_cost
         cap = DC_cap
-        bool = True
+        DC_better_ratio = True
     else:
-        bool = False
+        DC_better_ratio = False
         cost = L2_cost
         cap = L2_cap
     while budget>0 and (budget>=L2_cost or budget>=DC_cost):
-        if unserved_cars[sorted_unserved_cars[0][0]]>=cap and budget>=cost and bool == False or (bool== True and budget<DC_cost and budget >=L2_cost) :
+        if unserved_cars[sorted_unserved_cars[0][0]]>=cap and budget>=cost and DC_better_ratio == False or (DC_better_ratio== True and budget<DC_cost and budget >=L2_cost) :
             unserved_cars[sorted_unserved_cars[0][0]]-=L2_cap
             budget-=L2_cost
             L2_built[sorted_unserved_cars[0][0]]+=1
             #print(budget)
-        if (unserved_cars[sorted_unserved_cars[0][0]]<=DC_cap or bool == True) and budget>=DC_cost: 
+        if (unserved_cars[sorted_unserved_cars[0][0]]<=DC_cap or DC_better_ratio == True) and budget>=DC_cost: 
             m, n = sorted_unserved_cars[0][0]
             neighbors = get_neighbors(m,n, y, x)
             neighbors.append(sorted_unserved_cars[0][0])
@@ -169,16 +175,37 @@ def main():
             DC_built[sorted_unserved_cars[0][0]]+=1
             #neighbors.append(sorted_unserved_cars[0])
         sorted_unserved_cars = sorted(unserved_cars.items(), key=lambda item: item[1], reverse=True)
-        print(budget)
+        #@print(budget)
             
     #print(sorted_unserved_cars)
-    L2_sorted = sorted(L2_built.items(), key=lambda item: item[1], reverse=True)
+    L2_sorted = sorted(L2_built.items(), key=lambda item: item[1], reverse=False)
     DC_sorted = sorted(DC_built.items(), key=lambda item: item[1], reverse=False)
     total_L2 = sum(value for key, value in L2_sorted)
     print("Total sum of L2 chargers built:", total_L2)
     total_DC = sum(value for key, value in DC_sorted)
     print("Total sum of DC chargers built:", total_DC)
-    #print(DC_sorted)
+    #print(L2_sorted)
     #print(budget)
+    return unprocessed_unserved_cars,L2_built,DC_built,unserved_cars
+def visualisation(dict, title):
+    grid_size = (64, 96)
+    grid = np.zeros(grid_size)
+    for (i, j), value in dict.items():
+        grid[i, j] = value
+
+    plt.figure(figsize=(12, 8))
+    plt.imshow(grid, cmap='viridis', origin='upper')
+    plt.colorbar(label='Number')
+    plt.title(title)
+    plt.xlabel('X-axis')
+    plt.ylabel('Y-axis')
+    plt.show()
+
+def main():
+    unprocessed_unserved_cars,L2_built,DC_built,unserved_cars = heuristic_algorithm()
+    visualisation(unprocessed_unserved_cars, 'Unprocessed Unserved Cars')
+    visualisation(L2_built, 'L2 Chargers Built')
+    visualisation(DC_built, 'DC Chargers Built')
+    visualisation(unserved_cars, 'Unserved Cars After Building Chargers')
 if __name__ == "__main__":
     main()
