@@ -30,7 +30,7 @@ def heuristic_algorithm():
     cars = read_data()
     L2,DC = read_data_EV()
     L2_cap = 3
-    DC_cap = 12
+    DC_cap = 16
     L2_cost = 2000
     DC_cost = 10000
     budget = 9164000
@@ -194,11 +194,12 @@ def visualisation(dict, title):
         grid[i, j] = value
 
     plt.figure(figsize=(12, 8))
-    plt.imshow(grid, cmap='viridis', origin='upper')
+    plt.imshow(grid, cmap='viridis', origin='lower')
     plt.colorbar(label='Number')
     plt.title(title)
     plt.xlabel('X-axis')
     plt.ylabel('Y-axis')
+    #plt.invert_yaxis()
     plt.show()
 
 def main():
