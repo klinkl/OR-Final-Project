@@ -2,6 +2,8 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import gurobipy as gp
+import json
+import os
 from gurobipy import GRB, Model
 
 def find_block(coordinate: tuple, north_east: tuple, south_west: tuple, grid_size: tuple):
@@ -44,37 +46,59 @@ def get_tuple(district: int, size: tuple):
     district -= 1
     return (district // size[1], district % size[1])
 
-def print_data(cars, ecs, grid_size: tuple):
+def print_data(cars, ecs, grid_size: tuple, filename='new_cars_ecs_distribution.png'):
     y, x = grid_size
-    matrix_cars = np.zeros(grid_size)
-    matrix_ecs = np.zeros(grid_size)
+    matrix_l2_cars = np.zeros(grid_size)
+    matrix_dc_cars = np.zeros(grid_size)
+    matrix_l2_ecs = np.zeros(grid_size)
+    matrix_dc_ecs = np.zeros(grid_size)
 
-    for i, value in cars.items():
-        matrix_cars[get_tuple(i, grid_size)] = value
-    for i, value in ecs.items():
-        matrix_ecs[get_tuple(i, grid_size)] = value
+    for (i, type), value in cars.items():
+        if type == 1:  # Level 2
+            matrix_l2_cars[get_tuple(i, grid_size)] = value
+        elif type == 2:  # DC chargers
+            matrix_dc_cars[get_tuple(i, grid_size)] = value
 
-    plt.figure(figsize=(12, 8))
-    plt.imshow(matrix_cars, cmap='viridis', interpolation='nearest')
-    plt.colorbar(label='Number of Cars')
-    plt.title('Car Distribution in Grid')
-    plt.xlabel('Column Index')
-    plt.ylabel('Row Index') 
-    plt.xticks(np.arange(x - 1))
-    plt.yticks(np.arange(y - 1, -1, -1))
-    plt.grid(False)
+    for (i, type), value in ecs.items():
+        if type == 1:  # Level 2
+            matrix_l2_ecs[get_tuple(i, grid_size)] = value
+        elif type == 2:  # DC chargers
+            matrix_dc_ecs[get_tuple(i, grid_size)] = value
+
+    fig, axs = plt.subplots(2, 2, figsize=(15, 12))
+    data = [
+        (matrix_l2_cars, 'Cars covered by Level 2 charging station distribution', 'Number of cars covered by Level 2'),
+        (matrix_dc_cars, 'Cars covered by DC charging station distribution', 'Number of cars covered by DC'),
+        (matrix_l2_ecs, 'Level 2 charging station distribution', 'Number of Level 2 charging stations'),
+        (matrix_dc_ecs, 'DC charging station distribution', 'Number of DC charging stations')
+    ]
+
+    for i in range(2):
+        for j in range(2):
+            matrix, title, colorbar_label = data[i * 2 + j]
+            im = axs[i, j].imshow(matrix, cmap='viridis', interpolation='nearest')
+            fig.colorbar(im, ax=axs[i, j], label=colorbar_label)
+            axs[i, j].set_title(title)
+            axs[i, j].set_xlabel('Column Index')
+            axs[i, j].set_ylabel('Row Index') 
+            axs[i, j].set_xticks(np.arange(x))
+            axs[i, j].set_yticks(np.arange(y))
+            axs[i, j].invert_yaxis()
+            axs[i, j].grid(False)
+
+    plt.tight_layout()
+    # Save the plot to a file
+    plt.savefig(filename)
     plt.show()
 
-    plt.figure(figsize=(12, 8))
-    plt.imshow(matrix_ecs, cmap='viridis', interpolation='nearest')
-    plt.colorbar(label='Number of Electric charging stations')
-    plt.title('Electric charging stations Distribution in Grid')
-    plt.xlabel('Column Index')
-    plt.ylabel('Row Index') 
-    plt.xticks(np.arange(x - 1))
-    plt.yticks(np.arange(y - 1, -1, -1))
-    plt.grid(False)
-    plt.show()
+def safe_data(cars: dict, ecs: dict):
+    new_cars = {str(key): value for key, value in cars.items()}
+    new_ecs = {str(key): value for key, value in ecs.items()}
+    with open('new_cars_distribution.json', 'w') as json_file:
+        json.dump(new_cars, json_file)
+
+    with open('new_ecs_distribution.json', 'w') as json_file:
+        json.dump(new_ecs, json_file)
 
 def read_data(grid_size: tuple, N: list):
     most_eastern_north_point = (-116.9164, 49.0025) # is (63, 95)
@@ -121,17 +145,33 @@ def gurobi():
         "LICENSEID": 2508491
     }
     with gp.Env(params=options) as env, Model(env=env) as model:
+        # Get the number of available CPU threads
+        num_threads = os.cpu_count()
+        # Set the Threads parameter
+        model.setParam(GRB.Param.Threads, num_threads)
+
         grid_size = (32, 48)
         Y, X = grid_size
+        print(model.getParamInfo(GRB.Param.Threads))
 
         # Define sets and parameters
-        B = 9164000
+        B = 9164000 # available budget
         N = [1, 2]  # Charger types: 1 (Level Two Charger), 2 (DC Charger)
         C = {1: 2000, 2: 10000} # Costs for the charger types
-        C_n = {1: 3, 2: 12}  # Number of cars each charger can cover for types 1 and 2, respectively
+        C_n = {1: 3, 2: 16}  # Number of cars each charger can cover for types 1 and 2, respectively
         I = range(1, X * Y + 1) # number of districts
         V_i, D_in = read_data(grid_size, N) # Vi amount of cars, Di amount of chargers
-        Z_ij = {(i, j): 1 if abs(i - j) in range(1, 2) else 0 for i in I for j in I} # adjacents matrix for neighbours in district
+        Z_ij = {(i, j): 1 if abs(i - j) == 1 else 0 for i in I for j in I} # adjacents matrix for neighbours in district
+
+        lv2 = 0
+        dc = 0
+        for (i, n), value in D_in.items():
+            if n == 1:
+                lv2 += value
+            else:
+                dc += value
+        print(f"Number of level2 chargers: {lv2}\nNumber of DC chargers: {dc}")
+        print_data({(i, n): value for n in N for i, value in V_i.items()}, D_in, grid_size, filename='old_cars_ecs_distribution.png')
 
         x = model.addVars(I, N, vtype=GRB.CONTINUOUS, name="x")  # Number of cars covered by charger n in district i
         y = model.addVars(I, N, vtype=GRB.CONTINUOUS, name="y")  # Number of chargers of type n added to district i
@@ -163,22 +203,14 @@ def gurobi():
         model.optimize()
 
         # create diagrams for resulted data for level2
-        x_1 = {}
-        for i in I:
-            x_1[i] = x[i, 1].X
-        y_1 = {}
-        for i in I:
-            y_1[i] = y[i, 1].X
-        print_data(x_1, y_1, grid_size)
-
-        # create diagrams for resulted data for DC
-        x_2 = {}
-        for i in I:
-            x_2[i] = x[i, 2].X
-        y_2 = {}
-        for i in I:
-            y_2[i] = y[i, 2].X
-        print_data(x_2, y_2, grid_size)
+        cars = {}
+        ecs = {}
+        for n in N:
+            for i in I:
+                cars[i, n] = x[i, n].X
+                ecs[i, n] = y[i, n].X
+        print_data(cars, ecs, grid_size)
+        safe_data(cars, ecs)
 
         # print data that is not 0 to terminal
         for i in I:
@@ -193,13 +225,6 @@ def gurobi():
             for j in I:
                 if m[i, j].X > 0:
                     print(f"m[{i},{j}] = {m[i, j].X}")
-
-        """ if model.status == GRB.OPTIMAL:
-            print("Optimal solution found:")
-            for v in model.getVars():
-                print(f'{v.varName}: {v.x}')
-        else:
-            print("No optimal solution found.") """
 
 if __name__ == '__main__':
     gurobi()
